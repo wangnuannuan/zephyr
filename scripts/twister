@@ -843,6 +843,8 @@ def main():
 
     suite = TestSuite(options.board_root, options.testcase_root, options.outdir)
 
+    suite.arguments = options.__dict__
+
     # Check version of zephyr repo
     suite.check_zephyr_version()
 

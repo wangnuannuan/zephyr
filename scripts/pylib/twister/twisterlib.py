@@ -2572,6 +2572,7 @@ class TestSuite(DisablePyTestCollectionMixin):
 
     def __init__(self, board_root_list=[], testcase_roots=[], outdir=None):
 
+        self.arguments = dict()
         self.roots = testcase_roots
         if not isinstance(board_root_list, list):
             self.board_roots = [board_root_list]
@@ -2812,7 +2813,7 @@ class TestSuite(DisablePyTestCollectionMixin):
             self.csv_report(filename + ".csv")
 
             if json_report:
-                self.json_report(filename + ".json", append=only_failed, version=self.version)
+                self.json_report(filename + ".json", append=only_failed, version=self.version, arguments=self.arguments)
 
             if platform_reports:
                 self.target_report(outdir, suffix, append=only_failed)
@@ -3540,12 +3541,13 @@ class TestSuite(DisablePyTestCollectionMixin):
                     rowdict["rom_size"] = rom_size
                 cw.writerow(rowdict)
 
-    def json_report(self, filename, append=False, version="NA"):
+    def json_report(self, filename, append=False, version="NA", arguments=dict()):
         logger.info(f"Writing JSON report {filename}")
         report = {}
         selected = self.selected_platforms
         report["environment"] = {"os": os.name,
                                  "zephyr_version": version,
+                                 "arguments": arguments,
                                  "toolchain": self.get_toolchain()
                                  }
         json_data = {}
