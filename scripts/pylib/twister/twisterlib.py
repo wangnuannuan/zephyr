@@ -1075,6 +1075,11 @@ class QEMUHandler(Handler):
 
     def handle(self):
         self.results = {}
+        qemu_executable = self.instance.platform.filter_data.get("QEMU")
+        if not (qemu_executable and os.access(qemu_executable, os.X_OK)):
+            self.set_state("skipped", 0)
+            self.instance.reason  = f"Test skiped, QEMU binary {qemu_executable} is unexecutable"
+            return
         self.run = True
 
         # We pass this to QEMU which looks for fifos with .in and .out
