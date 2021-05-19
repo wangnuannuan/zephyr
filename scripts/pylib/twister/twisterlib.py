@@ -387,6 +387,7 @@ class Handler:
         self.binary = None
         self.pid_fn = None
         self.call_make_run = False
+        self.terminated = False
 
         self.name = instance.name
         self.instance = instance
@@ -418,6 +419,23 @@ class Handler:
                 for instance in harness.recording:
                     cw.writerow(instance)
 
+    def terminate(self, proc):
+        # encapsulate terminate functionality so we do it consistently where ever
+        # we might want to terminate the proc.  We need try_kill_process_by_pid
+        # because of both how newer ninja (1.6.0 or greater) and .NET / renode
+        # work.  Newer ninja's don't seem to pass SIGTERM down to the children
+        # so we need to use try_kill_process_by_pid.
+        for child in psutil.Process(proc.pid).children(recursive=True):
+            try:
+                os.kill(child.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        proc.terminate()
+        # sleep for a while before attempting to kill
+        time.sleep(0.5)
+        proc.kill()
+        self.terminated = True
+
 
 class BinaryHandler(Handler):
     def __init__(self, instance, type_str):
@@ -427,7 +445,6 @@ class BinaryHandler(Handler):
         """
         super().__init__(instance, type_str)
 
-        self.terminated = False
         self.call_west_flash = False
 
         # Tool options
@@ -446,23 +463,6 @@ class BinaryHandler(Handler):
                 os.kill(pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
-
-    def terminate(self, proc):
-        # encapsulate terminate functionality so we do it consistently where ever
-        # we might want to terminate the proc.  We need try_kill_process_by_pid
-        # because of both how newer ninja (1.6.0 or greater) and .NET / renode
-        # work.  Newer ninja's don't seem to pass SIGTERM down to the children
-        # so we need to use try_kill_process_by_pid.
-        for child in psutil.Process(proc.pid).children(recursive=True):
-            try:
-                os.kill(child.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
-        proc.terminate()
-        # sleep for a while before attempting to kill
-        time.sleep(0.5)
-        proc.kill()
-        self.terminated = True
 
     def _output_reader(self, proc):
         self.line = proc.stdout.readline()
@@ -1134,14 +1134,13 @@ class QEMUHandler(Handler):
                         self.returncode = 0
                     else:
                         self.returncode = proc.returncode
-                else:
-                    proc.terminate()
-                    proc.kill()
-                    self.returncode = proc.returncode
+
+                self.terminate(proc)
+                self.returncode = proc.returncode
             else:
                 if os.path.exists(self.pid_fn):
                     qemu_pid = int(open(self.pid_fn).read())
-                logger.debug(f"No timeout, return code from QEMU ({qemu_pid}): {proc.returncode}")
+                logger.debug(f"No timeout, return code from {command} (qemu pid: {qemu_pid}): {proc.returncode}")
                 self.returncode = proc.returncode
 
             # Need to wait for harness to finish processing
@@ -1153,7 +1152,7 @@ class QEMUHandler(Handler):
                 qemu_pid = int(open(self.pid_fn).read())
                 os.unlink(self.pid_fn)
 
-        logger.debug(f"return code from QEMU ({qemu_pid}): {self.returncode}")
+        logger.debug(f"return code from {command} (qemu pid: {qemu_pid}): {self.returncode}")
 
         if (self.returncode != 0 and not self.ignore_qemu_crash) or not harness.state:
             self.set_state("failed", 0)
