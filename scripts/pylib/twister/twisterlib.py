@@ -427,6 +427,7 @@ class Handler:
         # so we need to use try_kill_process_by_pid.
         for child in psutil.Process(proc.pid).children(recursive=True):
             try:
+                print("kill child: {}".format(child.pid))
                 os.kill(child.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
