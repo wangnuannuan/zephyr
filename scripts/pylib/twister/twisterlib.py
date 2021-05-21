@@ -1154,6 +1154,7 @@ class QEMUHandler(Handler):
                 os.unlink(self.pid_fn)
 
         logger.debug(f"return code from QEMU ({qemu_pid}): {self.returncode}")
+        print("command {} return with {}".format(command, self.returncode))
 
         if (self.returncode != 0 and not self.ignore_qemu_crash) or not harness.state:
             self.set_state("failed", 0)
@@ -3356,12 +3357,19 @@ class TestSuite(DisablePyTestCollectionMixin):
                                     overflow_as_errors=self.overflow_as_errors
                                     )
                 pb.process(pipeline, done_queue, task, lock, results)
-
+        print("Process {pid} has completed it's work".format(pid=os.getpid()))
         return True
+
+    def child_exited(self, sig, frame):
+        pid, exitcode = os.wait()
+        print("Child process {pid} exited with code {exitcode}".format(
+            pid=pid, exitcode=exitcode
+        ))
 
     def execute(self, pipeline, done, results):
         lock = Lock()
         logger.info("Adding tasks to the queue...")
+        signal.signal(signal.SIGCHLD, self.child_exited)
         self.add_tasks_to_queue(pipeline, self.build_only, self.test_only)
         logger.info("Added initial list of jobs to queue")
 
@@ -3371,10 +3379,16 @@ class TestSuite(DisablePyTestCollectionMixin):
             p = Process(target=self.pipeline_mgr, args=(pipeline, done, lock, results, ))
             processes.append(p)
             p.start()
+            print("Parent forked out worker process {pid}".format(pid=p.pid))
 
         try:
             for p in processes:
+                print("try to join process {}, it's status {}".format(p, p.is_alive()))
                 p.join()
+                print("join process {}, it's status {}".format(p, p.is_alive()))
+                if p.is_alive():
+                    print("join process {}, it's alive, kill it ".format(p))
+                    p.terminate()
         except KeyboardInterrupt:
             logger.info("Execution interrupted")
             for p in processes:
