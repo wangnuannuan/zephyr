@@ -34,6 +34,7 @@ import platform
 import yaml
 import json
 from multiprocessing import Lock, Process, Value
+import errno
 
 try:
     # Use the C LibYAML parser if available, rather than the Python parser.
@@ -3357,14 +3358,24 @@ class TestSuite(DisablePyTestCollectionMixin):
                                     overflow_as_errors=self.overflow_as_errors
                                     )
                 pb.process(pipeline, done_queue, task, lock, results)
-        print("Process {pid} has completed it's work".format(pid=os.getpid()))
         return True
 
     def child_exited(self, sig, frame):
-        pid, exitcode = os.wait()
-        print("Child process {pid} exited with code {exitcode}".format(
-            pid=pid, exitcode=exitcode
-        ))
+        try:
+            while True:
+                cpid, status = os.waitpid(-1, os.WNOHANG)
+                if cpid == 0:
+                    print('no child process was immediately available')
+                    break
+                exitcode = status >> 8
+                print("Child process {pid} exited with code {exitcode}".format(
+                    pid=cpid, exitcode=exitcode
+                ))
+        except OSError as e:
+            if e.errno == errno.ECHILD:
+                print('current process has no existing unwaited-for child processes.')
+            else:
+                raise
 
     def execute(self, pipeline, done, results):
         lock = Lock()
@@ -3382,13 +3393,11 @@ class TestSuite(DisablePyTestCollectionMixin):
             print("Parent forked out worker process {pid}".format(pid=p.pid))
 
         try:
-            for p in processes:
-                print("try to join process {}, it's status {}".format(p, p.is_alive()))
-                p.join()
-                print("join process {}, it's status {}".format(p, p.is_alive()))
-                if p.is_alive():
-                    print("join process {}, it's alive, kill it ".format(p))
-                    p.terminate()
+            while True:
+                if any([p.is_alive() for p in processes]):
+                    continue
+                else:
+                    break
         except KeyboardInterrupt:
             logger.info("Execution interrupted")
             for p in processes:
