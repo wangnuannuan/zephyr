@@ -3395,6 +3395,9 @@ class TestSuite(DisablePyTestCollectionMixin):
         try:
             while True:
                 if any([p.is_alive() for p in processes]):
+                    for p in processes:
+                        if p.is_alive():
+                            print(p.pid)
                     continue
                 else:
                     break
