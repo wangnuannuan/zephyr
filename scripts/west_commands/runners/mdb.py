@@ -9,7 +9,9 @@ import shutil
 import time
 import os
 from os import path
-
+import sys
+import signal
+import subprocess
 from runners.core import ZephyrBinaryRunner, RunnerCaps
 
 try:
@@ -48,6 +50,7 @@ def record_cld_pid(mdb_runner, mdb_process):
         if found:
             mdb_pid_file = path.join(mdb_runner.build_dir, 'mdb.pid')
             mdb_runner.logger.debug("MDB CLD pid: " + str(pid) + " " + mdb_pid_file)
+            mdb_runner.pid = pid
             with open(mdb_pid_file, 'w') as f:
                 f.write(str(pid))
             return
@@ -118,6 +121,18 @@ def mdb_do_run(mdb_runner, command):
 
     process = mdb_runner.popen_ignore_int(mdb_cmd)
     record_cld_pid(mdb_runner, process)
+    if mdb_runner.pid is not None:
+        while psutil.pid_exists(mdb_runner.pid):
+            ch = sys.stdin.read(1)
+            if ch == "c":
+                try:
+                    os.kill(mdb_runner.pid, signal.SIGTERM)
+                except Exception:
+                    pass
+                subprocess.call(["stty", "sane"], stdout=subprocess.DEVNULL)
+                break
+            else:
+                continue
 
 
 class MdbNsimBinaryRunner(ZephyrBinaryRunner):
@@ -134,6 +149,7 @@ class MdbNsimBinaryRunner(ZephyrBinaryRunner):
         self.elf_name = cfg.elf_file
         self.build_dir = cfg.build_dir
         self.dig_device = ''
+        self.pid = None
 
     @classmethod
     def name(cls):
@@ -179,6 +195,7 @@ class MdbHwBinaryRunner(ZephyrBinaryRunner):
         else:
             self.dig_device = ''
         self.build_dir = cfg.build_dir
+        self.pid = None
 
     @classmethod
     def name(cls):
