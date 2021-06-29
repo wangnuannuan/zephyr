@@ -8,8 +8,11 @@
 import shutil
 import time
 import os
+import signal
 from os import path
-
+import subprocess
+import threading
+import sys
 from runners.core import ZephyrBinaryRunner, RunnerCaps
 
 try:
@@ -37,6 +40,23 @@ def get_cld_pid(mdb_process):
         pass
 
     return (False, -1)
+
+
+def monitor_signal(process):
+    while True:
+        ch = sys.stdin.read(1)
+        if ch == "c":
+            print("user terminate")
+            for child in psutil.Process(process.pid).children(recursive=True):
+                try:
+                    os.kill(child.pid, signal.SIGTERM)
+                except Exception as e:
+                    print(e)
+                    pass
+            process.terminate()
+            time.sleep(0.5)
+            process.kill()
+            break
 
 # MDB creates child process (cld) which won't be terminated if we simply
 # terminate parents process (mdb). 'record_cld_pid' is provided to record 'cld'
@@ -116,8 +136,13 @@ def mdb_do_run(mdb_runner, command):
     else:
         raise ValueError('unsupported cores {}'.format(mdb_runner.cores))
 
-    process = mdb_runner.popen_ignore_int(mdb_cmd)
-    record_cld_pid(mdb_runner, process)
+    with mdb_runner.popen_ignore_int(mdb_cmd) as process:
+        record_cld_pid(mdb_runner, process)
+        t = threading.Thread(target=monitor_signal, args=(process,), daemon=True)
+        t.start()
+        t.join()
+        process.wait()
+    subprocess.call(["stty", "sane"], stdout=subprocess.DEVNULL)
 
 
 class MdbNsimBinaryRunner(ZephyrBinaryRunner):
