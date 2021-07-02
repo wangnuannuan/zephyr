@@ -2272,15 +2272,20 @@ class ProjectBuilder(FilterBuilder):
         elif self.device_testing:
             instance.handler = DeviceHandler(instance, "device")
             instance.handler.coverage = self.coverage
-        elif instance.platform.simulation == "nsim":
-            if find_executable("nsimdrv"):
+        elif "nsim" in instance.platform.simulation:
+            flash_runner = None
+            runner_executable = ""
+            re_flash_runner = re.compile('BOARD_FLASH_RUNNER=(.*) ')
+            match = re_flash_runner.search(" ".join(self.extra_args))
+            if match:
+                flash_runner = match.group(1)
+            if instance.platform.simulation == "mdb-nsim" or flash_runner == "mdb-nsim":
+                runner_executable = "mdb"
+            else:
+                runner_executable = "nsimdrv"
+            if find_executable(runner_executable):
                 instance.handler = BinaryHandler(instance, "nsim")
                 instance.handler.call_make_run = True
-        elif instance.platform.simulation == "mdb-nsim":
-            if find_executable("mdb"):
-                instance.handler = BinaryHandler(instance, "nsim")
-                instance.handler.pid_fn = os.path.join(instance.build_dir, "mdb.pid")
-                instance.handler.call_west_flash = True
         elif instance.platform.simulation == "armfvp":
             instance.handler = BinaryHandler(instance, "armfvp")
             instance.handler.call_make_run = True
