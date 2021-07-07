@@ -455,7 +455,7 @@ class BinaryHandler(Handler):
         self.coverage = False
 
     def try_kill_process_by_pid(self):
-        if self.pid_fn:
+        if self.pid_fn and os.path.exists(self.pid_fn):
             pid = int(open(self.pid_fn).read())
             os.unlink(self.pid_fn)
             self.pid_fn = None  # clear so we don't try to kill the binary twice
@@ -2280,7 +2280,8 @@ class ProjectBuilder(FilterBuilder):
             if find_executable("mdb"):
                 instance.handler = BinaryHandler(instance, "nsim")
                 instance.handler.pid_fn = os.path.join(instance.build_dir, "mdb.pid")
-                instance.handler.call_west_flash = True
+                # instance.handler.call_west_flash = True
+                instance.handler.call_make_run = True
         elif instance.platform.simulation == "armfvp":
             instance.handler = BinaryHandler(instance, "armfvp")
             instance.handler.call_make_run = True
